@@ -1,10 +1,11 @@
 package App::Control;
 
-require 5.005_62;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+use vars qw( $VERSION );
+
+$VERSION = '0.02';
 
 use File::Basename;
 use File::Path;
@@ -26,9 +27,7 @@ sub new
     ;
     unless ( -d $piddir )
     {
-        warn "Creating $piddir ...\n"
-            if $self->{VERBOSE}
-        ;
+        warn "Creating $piddir ...\n" if $self->{VERBOSE};
         mkpath( $piddir ) or die "Can't create path $piddir\n";
     }
     unless ( -w $piddir )
@@ -50,6 +49,7 @@ sub new
             unless ref( $self->{ARGS} ) eq 'ARRAY'
         ;
     }
+    $self->{SLEEP} = 1 unless defined $self->{SLEEP};
     $self->{ARGS} ||= [];
     $SIG{CHLD} = 'IGNORE';
     return $self;
@@ -70,13 +70,15 @@ sub pid()
     open( PID, $self->{PIDFILE} ) 
         or die "Can't open pid file $self->{PIDFILE}\n"
     ;
-    $self->{PID} = <PID>;
+    my $pid = <PID>;
     close( PID );
-    chomp( $self->{PID} );
-    die "$self->{PID} looks like a funny pid!\n"
-        unless $self->{PID} =~ /^\d+$/
+    return undef unless defined $pid;
+    chomp( $pid );
+    return undef unless $pid;
+    die "$pid looks like a funny pid!\n"
+        unless $pid =~ /^(\d+)$/
     ;
-    return $self->{PID};
+    return $self->{PID} = $1;
 }
 
 sub cmd()
@@ -107,10 +109,35 @@ sub cmd()
             warn "$self->{EXEC} @{$self->{ARGS}} ($child) started\n"
                 if $self->{VERBOSE}
             ;
+            if ( $self->{CREATE_PIDFILE} )
+            {
+                warn "Creating $self->{PIDFILE} ...\n" if $self->{VERBOSE};
+                open( FH, ">$self->{PIDFILE}" ) 
+                    or die "Can't write to $self->{PIDFILE}"
+                ;
+                print FH "$child\n";
+                close( FH );
+            }
+            my $loop = 0;
             while( not $self->running )
             {
                 warn $self->status if $self->{VERBOSE};
-                sleep( 1 );
+                sleep( $self->{SLEEP} );
+                warn "is $self->{EXEC} ruinning (${loop}'th time)?\n"
+                    if $self->{VERBOSE} and $loop
+                ;
+                if ( defined $self->{LOOP} and $loop++ == $self->{LOOP} )
+                {
+                    warn "Failed to start $self->{EXEC}\n"
+                        if $self->{VERBOSE}
+                    ;
+                    if ( kill( 0, $child ) )
+                    {
+                        warn "killing $child ...\n" if $self->{VERBOSE};
+                        kill( 'KILL', $child );
+                        exit;
+                    }
+                }
             }
             warn "$self->{EXEC} running\n" if $self->{VERBOSE};
         }
@@ -122,9 +149,7 @@ sub cmd()
     elsif ( $cmd eq 'stop' )
     {
         die $self->status unless $self->running;
-        warn "kill ", $self->pid, "\n"
-            if $self->{VERBOSE}
-        ;
+        warn "kill ", $self->pid, "\n" if $self->{VERBOSE};
         die "failed to kill ", $self->pid, "\n" 
             unless kill( 'TERM', $self->pid )
         ;
@@ -132,6 +157,13 @@ sub cmd()
         {
             warn $self->status if $self->{VERBOSE};
             sleep( 1 );
+        }
+        if ( $self->{CREATE_PIDFILE} )
+        {
+            warn "unlink $self->{PIDFILE}\n" if $self->{VERBOSE};
+            unlink( $self->{PIDFILE} ) or
+                warn "Can't unlink $self->{PIDFILE}\n"
+            ;
         }
         warn $self->pid, " killed\n" if $self->{VERBOSE};
     }
@@ -187,6 +219,7 @@ executable
         EXEC => $exec,
         ARGS => \@args,
         PIDFILE => $pidfile,
+        SLEEP => 1,
         VERBOSE => 1,
     );
     my $pid = $ctl->pid;
@@ -238,6 +271,23 @@ Path to the pidfile for the executable. This need not exists, but the
 constructor will die if it thinks it can't create it. If the path where
 the pidfile lives doesn't exist the constructor will try to create it. This
 option is REQUIRED.
+
+=head2 CREATE_PIDFILE
+
+By default, App::Control depends on the application to manage the pid file.
+This is consistent will analogous utilities (apachectl, chkdaemon, etc.), but
+if you would like App::Control to create pid files for you, then set this
+option to a true value.
+
+=head2 SLEEP
+
+Number of seconds to sleep before checking that the process has been started.
+If the start fails, the control script will loop with a SLEEP delay per
+iteration until it has (see <"LOOP">). Default is 1 second.
+
+head2 LOOP
+
+Number of times to loop before giving up on starting the process.
 
 =head2 VERBOSE
 
