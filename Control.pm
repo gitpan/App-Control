@@ -1,11 +1,9 @@
 package App::Control;
 
+$VERSION = '1.01';
+
 use strict;
 use warnings;
-
-use vars qw( $VERSION );
-
-$VERSION = '1.00';
 
 use File::Basename;
 use File::Path;
@@ -92,7 +90,7 @@ sub cmd()
     ;
     unless ( defined $cmd )
     {
-        die "CMD should be <start|stop|restart|status>\n";
+        die "CMD should be <start|stop|restart|status|hup>\n";
     }
     if ( $cmd eq 'status' )
     {
@@ -162,6 +160,7 @@ sub cmd()
             warn $self->status if $self->{VERBOSE};
             sleep( 1 );
         }
+        warn $self->pid, " killed\n" if $self->{VERBOSE};
         if ( $self->{CREATE_PIDFILE} )
         {
             warn "unlink $self->{PIDFILE}\n" if $self->{VERBOSE};
@@ -169,7 +168,6 @@ sub cmd()
                 warn "Can't unlink $self->{PIDFILE}\n"
             ;
         }
-        warn $self->pid, " killed\n" if $self->{VERBOSE};
     }
     elsif ( $cmd eq 'restart' )
     {
@@ -186,9 +184,23 @@ sub cmd()
             die "Error starting $self->{EXEC}: $@\n";
         }
     }
+    elsif ( $cmd eq 'hup' )
+    {
+        if ( $self->running )
+        {
+            unless ( kill( 'HUP', $self->pid ) )
+            {
+                die "Error hup'ing $self->{EXEC}: $@\n";
+            }
+        }
+        else
+        {
+            die "Can't hup $self->{EXEC}: not running\n";
+        }
+    }
     else
     {
-        die "CMD should be <start|stop|restart|status>\n";
+        die "CMD should be <start|stop|restart|status|hup>\n";
     }
 }
 
@@ -200,7 +212,7 @@ sub AUTOLOAD
     $method =~ s/.*:://;
     return if $method eq 'DESTROY';
     die "unkown method $method\n" 
-        unless $method =~ /^(start|stop|restart|status)$/
+        unless $method =~ /^(start|stop|restart|status|hup)$/
     ;
     $self->cmd( $method );
 }
@@ -241,6 +253,7 @@ executable
     # or alternatively ...
     $ctl->cmd( 'start' );
     $ctl->stop;
+    $ctl->hup;
     $ctl->restart;
 
 =head1 DESCRIPTION
@@ -287,8 +300,8 @@ the relevant config files.
 
 By default, App::Control depends on the application to manage the pid file.
 This is consistent will analogous utilities (apachectl, chkdaemon, etc.), but
-if you would like App::Control to create pid files for you, then set this
-option to a true value.
+if you would like App::Control to create and remove pid files for you, then set
+this option to a true value.
 
 =head2 SLEEP
 
@@ -317,6 +330,10 @@ pidfile.
 Stop the executable specified in the constructor. It assumes that the pid
 listed in the pidfile specified in the constructor is the process to kill.
 This method waits until it is convinced that the executable has stopped.
+
+=head2 hup
+
+Send a SIGHUP to the executable.
 
 =head2 restart
 

@@ -63,6 +63,12 @@ eval {
     $ctl->start;
     die $ctl->pid, "running\n" if $ctl->running;
     unlink( $ignore_file );
+    $ctl->start;
+    die $ctl->pid, " not running\n" unless $ctl->running;
+    $ctl->hup;
+    die $ctl->pid, " not running\n" unless $ctl->running;
+    $ctl->stop;
+    die "Still running\n" if $ctl->running;
 };
 if ( $@ )
 {
