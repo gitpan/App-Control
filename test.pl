@@ -49,6 +49,20 @@ eval {
     $ctl->stop;
     die "Still running\n" if $ctl->running;
     unlink( $pidfile ) or die "Can't remove pidfile $pidfile\n";
+    my $ignore_file = 'ignore.tmp';
+    die "can't create $ignore_file\n" unless open( FH, ">$ignore_file" );
+    close( FH );
+    my $ctl = App::Control->new(
+        IGNOREFILE => 'ignore.tmp',
+        EXEC => $exec,
+        ARGS => [ $pidfile ],
+        PIDFILE => $pidfile,
+        VERBOSE => 1,
+    ) or die "failed to create new App::Control object\n";
+    warn "test ignore ...\n";
+    $ctl->start;
+    die $ctl->pid, "running\n" if $ctl->running;
+    unlink( $ignore_file );
 };
 if ( $@ )
 {

@@ -5,7 +5,7 @@ use warnings;
 
 use vars qw( $VERSION );
 
-$VERSION = '0.02';
+$VERSION = '1.00';
 
 use File::Basename;
 use File::Path;
@@ -86,6 +86,10 @@ sub cmd()
     my $self = shift;
     my $cmd = shift;
 
+    return if
+        defined $self->{IGNOREFILE} and
+        -e $self->{IGNOREFILE}
+    ;
     unless ( defined $cmd )
     {
         die "CMD should be <start|stop|restart|status>\n";
@@ -271,6 +275,13 @@ Path to the pidfile for the executable. This need not exists, but the
 constructor will die if it thinks it can't create it. If the path where
 the pidfile lives doesn't exist the constructor will try to create it. This
 option is REQUIRED.
+
+=head2 IGNOREFILE
+
+The ignore file allows you to temporarily disable the control functionality.
+Suppose you have a chkdaemon / crontab entry that restarts a service;
+specifying an IGNOREFILE means that you can disable this wihtout having to edit
+the relevant config files.
 
 =head2 CREATE_PIDFILE
 
