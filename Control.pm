@@ -1,6 +1,6 @@
 package App::Control;
 
-$VERSION = '1.01';
+$VERSION = '1.02';
 
 use strict;
 use warnings;
@@ -49,7 +49,6 @@ sub new
     }
     $self->{SLEEP} = 1 unless defined $self->{SLEEP};
     $self->{ARGS} ||= [];
-    $SIG{CHLD} = 'IGNORE';
     return $self;
 }
 
@@ -108,6 +107,7 @@ sub cmd()
         my $child = fork;
         if ( $child )
         {
+            $SIG{CHLD} = 'IGNORE';
             warn "$self->{EXEC} @{$self->{ARGS}} ($child) started\n"
                 if $self->{VERBOSE}
             ;
